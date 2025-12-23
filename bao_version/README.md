@@ -23,7 +23,7 @@ dd if=imx-boot_4G.bin of=<$DRIVE> bs=1K seek=32 conv=fsync
 ```
 5. 格式化SD卡启动盘第一个分区为ext4格式
 ```bash
-sudo mkfs.ext4 <$DRIVE>
+sudo mkfs.ext4 <$DRIVE>1
 ```
 6. 将SD卡拔出，重新连接，将rootfs.ext4.tar解压到SD卡1号分区
 ```bash
