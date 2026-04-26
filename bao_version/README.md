@@ -9,6 +9,7 @@
 > 5. （或者直接拷贝/home/gongty/hvisor-files整个目录，已包含上述所有文件了）
 
 ### SD卡内文件说明（如要删改，必须先备份）：
+- 有一张签字笔涂黑的64G三星，里面存的是可运行的 sel4测例 和 hyperAMP共享内存系统；另外三张都是旧版本的 genode 和 net proxy，注意区别。
 > Image：运行在 zone 0，必须是厂商提供的板载内核镜像，否则无法启动系统；  
 > Image-5.4：运行在 zone 1，调试用；  
 > hvisor.bin：hvisor启动镜像；
@@ -114,6 +115,22 @@ mount -t sysfs sysfs /sys
 rm nohup.out
 mkdir -p /dev/pts
 mount -t devpts devpts /dev/pts
+
+# 配置网络
+ip link set dev eth0 address {MAC_ARRDRSS_HERE}
+ip link set eth0 up
+dhclient eth0
+brctl addbr br0
+brctl addif br0 eth0
+ifconfig eth0 0
+dhclient br0
+ip tuntap add dev tap0 mode tap
+brctl addif br0 tap0
+ip link set dev tap0 up
+ntpdate cn.pool.ntp.org
+
+#测试网络连通性
+timeout 10 curl www.baidu.com
 
 ./hyperamp_backend > log.txt 2>&1 &
 sleep 2
