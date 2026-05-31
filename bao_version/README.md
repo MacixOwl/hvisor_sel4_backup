@@ -108,15 +108,22 @@ ext4load mmc 1:1 0x40400000 /home/arm64/Image-default.elf;  bootelf 0x40400000 -
 ### 6. 进入 root Linux 后，启动系统
 ```bash
 bash
-cd home/arm64
-insmod hvisor.ko
+# cd home/arm64
+# insmod hvisor.ko
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
-rm nohup.out
+# rm nohup.out
 mkdir -p /dev/pts
 mount -t devpts devpts /dev/pts
 
-# 配置网络
+# 配置5G网络
+/usr/bin/fltest_rm500.sh
+# /usr/bin/questel-CM > /tmp/5G.log 2>&1 &
+dhclient usb0
+ip addr
+# ping -c 4 8.8.8.8
+
+# 配置有线网络
 ip link set dev eth0 address {MAC_ARRDRSS_HERE}
 ip link set eth0 up
 dhclient eth0
