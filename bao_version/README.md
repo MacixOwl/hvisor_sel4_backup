@@ -77,6 +77,7 @@ make all ARCH=arm64 LOG=LOG_WARN KDIR=/path/to/your/OKMX8MP-C_Linux5.4.70+Qt5.15
 
 ### 4. 编译 seL4（拉取 HighSpeedCProxy 分支，编译 HyperAMP，使用[gitee仓库](https://gitee.com/open-microkernel/sel4test)）
 ```bash
+cd build-imx
 ../init-build.sh -DPLATFORM=imx8mp-evk -DAARCH64=1 -DSel4testApp=hyperamp-server
 ninja
 ```
@@ -108,43 +109,108 @@ ext4load mmc 1:1 0x40400000 /home/arm64/Image-default.elf;  bootelf 0x40400000 -
 ### 6. 进入 root Linux 后，启动系统
 ```bash
 bash
-# cd home/arm64
-# insmod hvisor.ko
+cd home/arm64
+insmod hvisor.ko
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
-# rm nohup.out
+rm nohup.out
 mkdir -p /dev/pts
 mount -t devpts devpts /dev/pts
 
 # 配置5G网络
 /usr/bin/fltest_rm500.sh
-# /usr/bin/questel-CM > /tmp/5G.log 2>&1 &
+/usr/bin/quectel-CM > /tmp/5G.log 2>&1 &
 dhclient usb0
 ip addr
-# ping -c 4 8.8.8.8
+# ping -c 4 223.6.6.6
+
+# 启动 imx 温控传感器
+cd ./python-sensor
+./run.sh
+cd ..
+
+# ssh 远控 p550，启停firefox
+ssh ubuntu@192.168.31.40
+
+export DISPLAY=:1;
+export XDG_RUNTIME_DIR=/run/user/1000;
+firefox http://localhost:9899/deviceList &
+
+
+export DISPLAY=:1;
+export XDG_RUNTIME_DIR=/run/user/1000;
+firefox http://localhost:9900/haier/kuokouLine3 &
+
+# close firefox
+export DISPLAY=:1
+export XDG_RUNTIME_DIR=/run/user/1000
+wmctrl -c "Mozilla Firefox"
 
 # 配置有线网络
-ip link set dev eth0 address {MAC_ARRDRSS_HERE}
-ip link set eth0 up
-dhclient eth0
-brctl addbr br0
-brctl addif br0 eth0
-ifconfig eth0 0
-dhclient br0
-ip tuntap add dev tap0 mode tap
-brctl addif br0 tap0
-ip link set dev tap0 up
-ntpdate cn.pool.ntp.org
+# create ns1
+ip netns del ns1 2>/dev/null || true
+ip netns add ns1
+# move eth0 into ns1
+# ip link set dev eth0 address "02:01:00:00:00:01" # mnemosyne
+ip link set eth0 netns ns1
+sleep 1
+# config inside the ns1
+ip netns exec ns1 ip link set lo up
+ip netns exec ns1 ip link set eth0 up
+ip netns exec ns1 ip link add br0 type bridge
+ip netns exec ns1 ip link set eth0 master br0
+ip netns exec ns1 ip addr flush dev eth0
+# alloc static IP in ns1
+ip netns exec ns1 ip addr add 192.168.137.2/24 dev br0
+ip netns exec ns1 ip link set br0 up
+# create tap0 and add to br0
+ip netns exec ns1 ip tuntap add dev tap0 mode tap
+ip netns exec ns1 ip link set tap0 master br0
+ip netns exec ns1 ip link set dev tap0 up
+# Add external network
+ip netns exec ns1 ip addr add 192.168.31.170/24 dev br0
+ip netns exec ns1 ip route add default via 192.168.31.1
+echo "nameserver 223.5.5.5" > /etc/resolv.conf
+
+# ip link set dev eth0 address 02:11:22:33:44:55
+# ip link set eth0 up
+# dhclient eth0
+# brctl addbr br0
+# brctl addif br0 eth0
+# ifconfig eth0 0
+# dhclient br0
+# ip tuntap add dev tap0 mode tap
+# brctl addif br0 tap0
+# ip link set dev tap0 up
+# ip link set lo up
+# ntpdate cn.pool.ntp.org
 
 #测试网络连通性
-timeout 10 curl www.baidu.com
+# timeout 10 curl www.baidu.com
 
-./hyperamp_backend > log.txt 2>&1 &
+ # 启动 cproxy_backend and monkey cli
+cd ./cproxy.d
+export LD_LIBRARY_PATH=.:$LD_LIBRARY_PATH
+./cproxy > log.txt 2>&1 &
 sleep 2
-cat log.txt
+cd ..
 
-nohup ./hvisor virtio start con_virtio.json &
-nohup ./hvisor zone start sel4.json 
+# start the hvisor sel4 system, within ns1
+ip netns exec ns1 nohup ./hvisor virtio start con_virtio.json &
+ip netns exec ns1 nohup ./hvisor zone start sel4.json
+
+chmod +x ./monkey-mnemosyne
+ip netns exec ns1 ./monkey-mnemosyne
+
+# ./hyperamp_backend > log.txt 2>&1 &
+# sleep 2
+# cat log.txt
+
+# nohup ./hvisor virtio start con_virtio.json &
+# nohup ./hvisor zone start sel4.json 
+
+# ./monkey-mnemosyne
+
 
 # 查看虚拟机运行状态
 ./hvisor zone list
